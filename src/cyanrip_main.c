@@ -1811,8 +1811,11 @@ int main(int argc, char **argv)
         track_metadata_ptr[track_metadata_ptr_cnt++] = track_meta[i];
 
     for (int i = 0; i < 32 && cover[i]; i++) {
-        p = av_strtok(cover[i], "=", &p_save);
-        char *next = av_strtok(NULL, "=", &p_save);
+        /* Split on the first "=" only, paths may contain them */
+        char *next = strchr(cover[i], '=');
+        if (next)
+            *next++ = '\0';
+        p = cover[i];
         CRIPArt *dst = NULL;
 
         if (!next) {
