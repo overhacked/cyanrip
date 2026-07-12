@@ -1154,6 +1154,8 @@ static char *append_missing_keys(char *src, const char *key1, const char *key2)
 
 static inline int crip_is_integer(const char *src)
 {
+    if (!src || !src[0])
+        return 0;
     for (int i = 0; i < strlen(src); i++)
         if (!av_isdigit(src[i]))
             return 0;
@@ -1285,9 +1287,33 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
 {
     char *scheme_copy = av_strdup(scheme);
 
-    char *save, *tok = av_strtok(scheme_copy, "{}", &save);
-    while (tok) {
-        if (!strncmp(tok, "if", strlen("if"))) {
+    char *pos = scheme_copy;
+    while (*pos) {
+        /* Literal text outside of {} is emitted as-is, never substituted */
+        if (*pos != '{') {
+            char *next = strchr(pos, '{');
+            char tmpc = next ? *next : 0;
+            if (next)
+                *next = '\0';
+            crip_bprint_sanitize(ctx, buf, pos, dir_list, dir_list_nb, 0);
+            if (!next)
+                break;
+            *next = tmpc;
+            pos = next;
+            continue;
+        }
+
+        char *end = strchr(pos + 1, '}');
+        if (!end) {
+            cyanrip_log(ctx, 0, "Invalid scheme syntax, unterminated \"{\"!\n");
+            goto fail;
+        }
+        *end = '\0';
+        char *tok = pos + 1;
+        pos = end + 1;
+
+        if (!strncmp(tok, "if", strlen("if")) &&
+            (tok[strlen("if")] == ' ' || tok[strlen("if")] == '#')) {
             char *cond = av_strdup(tok);
             char *cond_save, *cond_tok = av_strtok(cond, "#", &cond_save);
 
@@ -1389,8 +1415,6 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
             av_free(val2);
             av_free(val1);
             av_free(cond);
-
-            tok = av_strtok(NULL, "{}", &save);
             continue;
         }
 
@@ -1403,8 +1427,6 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
 
         crip_bprint_sanitize(ctx, buf, val, dir_list, dir_list_nb, origin_is_tag);
         av_free(val);
-
-        tok = av_strtok(NULL, "{}", &save);
     }
 
     av_free(scheme_copy);
