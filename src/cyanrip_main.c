@@ -2180,6 +2180,30 @@ int main(int argc, char **argv)
         cyanrip_log(ctx, 0, "\n");
     }
 
+    /* Warn if the naming scheme sends multiple tracks to the same file */
+    if (!ctx->settings.print_info_only) {
+        for (int f = 0; f < ctx->settings.outputs_num; f++) {
+            const cyanrip_out_fmt *cfmt = &crip_fmt_info[ctx->settings.outputs[f]];
+            char **paths = av_calloc(ctx->nb_tracks, sizeof(*paths));
+            if (!paths)
+                break;
+            for (int i = 0; i < ctx->nb_tracks; i++)
+                paths[i] = crip_get_path(ctx, CRIP_PATH_TRACK, 0, cfmt,
+                                         &ctx->tracks[i]);
+            for (int i = 0; i < ctx->nb_tracks; i++)
+                for (int j = i + 1; j < ctx->nb_tracks; j++)
+                    if (paths[i] && paths[j] && !strcmp(paths[i], paths[j]))
+                        cyanrip_log(ctx, 0, "WARNING: tracks %i and %i resolve to "
+                                    "the same file \"%s\", one will overwrite "
+                                    "the other!\n",
+                                    ctx->tracks[i].number, ctx->tracks[j].number,
+                                    paths[i]);
+            for (int i = 0; i < ctx->nb_tracks; i++)
+                av_free(paths[i]);
+            av_free(paths);
+        }
+    }
+
     cyanrip_log(ctx, 0, "Tracks:\n");
     if (ctx->settings.rip_indices_count == -1) {
         ctx->frames_to_read = ctx->duration_frames;
