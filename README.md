@@ -131,7 +131,8 @@ Arguments are optional, except `-s`. By default cyanrip will rip all tracks from
 | -G                   | Disables embedding of cover art images                                                      |
 |                      | **Misc. options**                                                                           |
 | -Q                   | Eject CD tray if ripping has been successfully completed                                    |
-| -V                   | Print version                                                                               |
+| -Y `file`            | Verify that a rip log's checksum matches its contents                                       |
+| -v                   | Print version                                                                               |
 | -h                   | Print usage (this)                                                                          |
 | -f                   | Find drive offset (requires a disc with an AccuRip DB entry)                                |
 

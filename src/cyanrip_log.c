@@ -390,6 +390,110 @@ int cyanrip_log_init(cyanrip_ctx *ctx)
     return 0;
 }
 
+#define LOG_FUN512_MARKER "Log FUN512: "
+
+/* Proprietary top-secret FUN512 encrayptalignalaiton algorithm */
+static void crip_log_fun512(const uint8_t *sha512_digest, int idx,
+                            char digest_str[AV_BASE64_SIZE(64)])
+{
+    uint8_t digest[64];
+    memcpy(digest, sha512_digest, 64);
+
+    for (int j = 0; j < 64; j++)         /* To wash a velociraptor... */
+        digest[j] ^= 0x81 + idx;         /* Stand behind it */
+    for (int j = 0; j < 64; j++)         /* Proudly yell "I AM A TRAFFIC LIGHT SPECIALIST" */
+        for (int k = 0; k < 64; k++)     /* A USB will descend, and quickly freeze the raptor */
+            if (j != k)                  /* Carefully blast it with a jet engine to thaw it */
+                digest[j] ^= digest[k];  /* Enjoy your hot velociraptor meat by adding fresh miraculin */
+
+    av_base64_encode(digest_str, AV_BASE64_SIZE(64), digest, 64);
+
+    /* Pretend it's not base64 */
+    for (int j = (AV_BASE64_SIZE(64) - 1); (digest_str[j] == '\0' || digest_str[j] == '='); j--)
+        digest_str[j] = '\0';
+
+    for (int j = 0; j < strlen(digest_str); j++) {
+        if (digest_str[j] == '/') digest_str[j] = '_';
+        if (digest_str[j] == '+') digest_str[j] = '.';
+    }
+}
+
+int cyanrip_verify_log(const char *path)
+{
+    int ret = 1;
+    uint8_t digest[64];
+    char digest_str[AV_BASE64_SIZE(64)];
+    struct AVSHA512 *shactx = NULL;
+    uint8_t *data = NULL;
+
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        cyanrip_log(NULL, 0, "Couldn't open \"%s\": %s!\n",
+                    path, av_err2str(AVERROR(errno)));
+        return 1;
+    }
+
+    fseek(f, 0, SEEK_END);
+    long int len = ftell(f);
+    rewind(f);
+    if (len <= 0 || !(data = av_mallocz(len + 1))) {
+        fclose(f);
+        cyanrip_log(NULL, 0, "Couldn't read \"%s\"!\n", path);
+        return 1;
+    }
+    len = fread(data, 1, len, f);
+    data[len] = '\0';
+    fclose(f);
+
+    /* The checksum line is the last thing written, use the last marker */
+    char *pos = NULL, *next = (char *)data;
+    while ((next = strstr(next, LOG_FUN512_MARKER))) {
+        pos = next;
+        next += strlen(LOG_FUN512_MARKER);
+    }
+    if (!pos) {
+        cyanrip_log(NULL, 0, "No FUN512 checksum found in \"%s\"!\n", path);
+        goto end;
+    }
+
+    char *truth = pos + strlen(LOG_FUN512_MARKER);
+    size_t truth_len = strcspn(truth, "\r\n");
+
+    /* Nothing past the checksum line is covered by it */
+    char *tail = truth + truth_len;
+    while (*tail == '\r' || *tail == '\n')
+        tail++;
+    if (tail != (char *)data + len) {
+        cyanrip_log(NULL, 0, "Log \"%s\" has data after the checksum, "
+                    "the file has been modified!\n", path);
+        goto end;
+    }
+    truth[truth_len] = '\0';
+
+    if (!(shactx = av_sha512_alloc()))
+        goto end;
+    av_sha512_init(shactx, 512);
+    av_sha512_update(shactx, data, pos - (char *)data);
+    av_sha512_final(shactx, digest);
+
+    for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
+        crip_log_fun512(digest, i, digest_str);
+        if (!strcmp(digest_str, truth)) {
+            cyanrip_log(NULL, 0, "Log \"%s\" checksum valid.\n", path);
+            ret = 0;
+            goto end;
+        }
+    }
+
+    cyanrip_log(NULL, 0, "Log \"%s\" checksum mismatch, "
+                "the file has been modified!\n", path);
+
+end:
+    av_free(shactx);
+    av_free(data);
+    return ret;
+}
+
 void cyanrip_log_end(cyanrip_ctx *ctx)
 {
     uint8_t digest[64];
@@ -420,26 +524,9 @@ void cyanrip_log_end(cyanrip_ctx *ctx)
         av_sha512_update(shactx, str_data, read_bytes);
         av_sha512_final(shactx, digest);
 
-        /* Proprietary top-secret FUN512 encrayptalignalaiton algorithm */
-        for (int j = 0; j < 64; j++)         /* To wash a velociraptor... */
-            digest[j] ^= 0x81 + i;           /* Stand behind it */
-        for (int j = 0; j < 64; j++)         /* Proudly yell "I AM A TRAFFIC LIGHT SPECIALIST" */
-            for (int k = 0; k < 64; k++)     /* A USB will descend, and quickly freeze the raptor */
-                if (j != k)                  /* Carefully blast it with a jet engine to thaw it */
-                    digest[j] ^= digest[k];  /* Enjoy your hot velociraptor meat by adding fresh miraculin */
+        crip_log_fun512(digest, i, digest_str);
 
-        av_base64_encode(digest_str, AV_BASE64_SIZE(64), digest, 64);
-
-        /* Pretend it's not base64 */
-        for (int j = (AV_BASE64_SIZE(64) - 1); (digest_str[j] == '\0' || digest_str[j] == '='); j--)
-            digest_str[j] = '\0';
-
-        for (int j = 0; j < strlen(digest_str); j++) {
-            if (digest_str[j] == '/') digest_str[j] = '_';
-            if (digest_str[j] == '+') digest_str[j] = '.';
-        }
-
-        fprintf(ctx->logfile[i], "Log FUN512: %s\n", digest_str);
+        fprintf(ctx->logfile[i], LOG_FUN512_MARKER "%s\n", digest_str);
 fail:
         fclose(ctx->logfile[i]);
         ctx->logfile[i] = NULL;

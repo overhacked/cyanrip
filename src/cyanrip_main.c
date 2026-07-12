@@ -1653,6 +1653,8 @@ int main(int argc, char **argv)
                 "Eject tray once successfully done");
     GEN_OPT_ONE(opts_list, bool,    find_offset, "f", 0, 0, 0, 0, 0,
                 "Find drive offset (requires a disc with an AccuRip entry)");
+    GEN_OPT_ONE(opts_list, char *,  verify_log, "Y", 1, 1, NULL, 0, 0,
+                "Verify a rip log's FUN512 checksum");
 
     {
         int r = GEN_OPT_PARSE(NULL, opts_list, argc, argv);
@@ -1668,6 +1670,9 @@ int main(int argc, char **argv)
             break;
         }
     }
+
+    if (verify_log)
+        return cyanrip_verify_log(verify_log);
 
     if (device)
         settings.dev_path = strdup(device);

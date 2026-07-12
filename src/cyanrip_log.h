@@ -23,6 +23,9 @@
 int cyanrip_log_init(cyanrip_ctx *ctx);
 void cyanrip_log_end(cyanrip_ctx *ctx);
 
+/* Check a written log's FUN512 checksum, 0 if valid */
+int cyanrip_verify_log(const char *path);
+
 void cyanrip_log_start_report(cyanrip_ctx *ctx);
 void cyanrip_log_finish_report(cyanrip_ctx *ctx);
 void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t);
