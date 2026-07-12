@@ -126,6 +126,22 @@ int main(void)
               crip_get_path(&ctx, CRIP_PATH_LOG, 0, &fmt, NULL),
               "folder/track.log");
 
+    /* Whitespace at component edges and before the extension is trimmed:
+     * conditional bodies with spaces easily produce it on one branch */
+    av_dict_set(&ctx.meta, "disc", "2", 0);
+    av_dict_set(&ctx.meta, "totaldiscs", "3", 0);
+    ctx.settings.folder_name_scheme = "{if #totaldiscs# > #1# CD|disc|}";
+    check_track_path("{track}", t, "CD2/1.flac");
+    ctx.settings.folder_name_scheme = "folder";
+
+    av_dict_set(&t->meta, "totaldiscs", "3", 0);
+    check_track_path("Disc {if #totaldiscs# > #1#|disc| of |totaldiscs|}", t,
+                     "folder/Disc 2 of 3.flac");
+    av_dict_set(&t->meta, "totaldiscs", "1", 0);
+    check_track_path("Disc {if #totaldiscs# > #1#|disc| of |totaldiscs|}", t,
+                     "folder/Disc.flac");
+    check_track_path("  {track}", t, "folder/1.flac");
+
     if (fails) {
         printf("%i check(s) failed\n", fails);
         return 1;
