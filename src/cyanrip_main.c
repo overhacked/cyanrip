@@ -242,6 +242,21 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 
     cdio_paranoia_modeset(ctx->paranoia, paranoia_level_map[settings->paranoia_level]);
 
+    /* Disc images have no hardware cache to defeat; paranoia's cache probe
+     * reads cachemodel sectors past the seek target on backseeks, which
+     * beyond the leadout gets counted as a read error. 1, not 0, as the
+     * cachemodel size is also the c_block read chunk size, and 0 never
+     * makes progress */
+    switch (cdio_get_driver_id(ctx->cdio)) {
+    case DRIVER_BINCUE:
+    case DRIVER_NRG:
+    case DRIVER_CDRDAO:
+        cdio_paranoia_cachemodel_size(ctx->paranoia, 1);
+        break;
+    default:
+        break;
+    }
+
     ctx->start_lsn = 0;
 
     ctx->end_lsn = cdio_get_track_lsn(ctx->cdio, CDIO_CDROM_LEADOUT_TRACK) - 1;
