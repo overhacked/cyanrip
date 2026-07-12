@@ -17,7 +17,6 @@
  */
 
 #include <time.h>
-#include <getopt.h>
 #include <sys/stat.h>
 
 #ifdef _WIN32
@@ -38,6 +37,20 @@
 #include "accurip.h"
 #include "os_compat.h"
 #include "cyanrip_encode.h"
+
+static char cyanrip_helpstr[128];
+
+#define GEN_OPT_MAX_ARR 198
+#define GEN_OPT_HELPSTRING cyanrip_helpstr
+#include "genopt.h"
+
+static int genopt_nb_vals(GenOpt *opts_list, int n, const char *name)
+{
+    for (int i = 0; i < n; i++)
+        if (opts_list[i].name && !strcmp(opts_list[i].name, name))
+            return opts_list[i].present ? opts_list[i].nb_vals : 0;
+    return 0;
+}
 
 int quit_now = 0;
 
@@ -1491,7 +1504,7 @@ int main(int argc, char **argv)
 
     memset(settings.pregap_action, CYANRIP_PREGAP_DEFAULT, 198*sizeof(*settings.pregap_action));
 
-    int c, idx;
+    int idx;
     char *p_save, *p;
     int mb_release_idx = -1;
     char *mb_release_str = NULL;
@@ -1501,7 +1514,6 @@ int main(int argc, char **argv)
     int track_metadata_ptr_cnt = 0;
     int find_drive_offset_range = 0;
     int offset_set = 0;
-    int img_size = -1;
 
     CRIPArt cover_arts[32] = { 0 };
     int nb_cover_arts = 0;
@@ -1510,356 +1522,339 @@ int main(int argc, char **argv)
     int track_cover_arts_map[198] = { 0 };
     int nb_track_cover_arts = 0;
 
-    while ((c = getopt(argc, argv, "hNAUfHIVQEGWKOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:M:Z:m:")) != -1) {
-        switch (c) {
-        case 'h':
-            cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
-            cyanrip_log(ctx, 0, "\n  Ripping options:\n");
-            cyanrip_log(ctx, 0, "    -d <path>             Set device path (can be a TOC file)\n");
-            cyanrip_log(ctx, 0, "    -s <int>              CD Drive offset in samples (default: 0)\n");
-            cyanrip_log(ctx, 0, "    -r <int>              Maximum number of retries for frames and repeated rips (default: 10)\n");
-            cyanrip_log(ctx, 0, "    -Z <int>              Rips tracks until their checksums match <int> number of times. For very damaged CDs.\n");
-            cyanrip_log(ctx, 0, "    -S <int>              Set drive speed (default: unset)\n");
-            cyanrip_log(ctx, 0, "    -p <number>=<string>  Track pregap handling (default: default)\n");
-            cyanrip_log(ctx, 0, "    -P <int>              Paranoia level, %i to 0 inclusive, default: %i\n", crip_max_paranoia_level, settings.paranoia_level);
-            cyanrip_log(ctx, 0, "    -O                    Enable overreading into lead-in and lead-out (may freeze if unsupported by drive)\n");
-            cyanrip_log(ctx, 0, "    -H                    Enable HDCD decoding. Do this if you're sure disc is HDCD\n");
-            cyanrip_log(ctx, 0, "    -E                    Force CD deemphasis\n");
-            cyanrip_log(ctx, 0, "    -W                    Disable automatic CD deemphasis\n");
-            cyanrip_log(ctx, 0, "    -K                    Disable ReplayGain tagging\n");
-            cyanrip_log(ctx, 0, "\n  Output options:\n");
-            cyanrip_log(ctx, 0, "    -o <string>           Comma separated list of outputs\n");
-            cyanrip_log(ctx, 0, "    -b <kbps>             Bitrate of lossy files in kbps\n");
-            cyanrip_log(ctx, 0, "    -D <string>           Directory naming scheme, by default its \"%s\"\n", settings.folder_name_scheme);
-            cyanrip_log(ctx, 0, "    -F <string>           Track naming scheme, by default its \"%s\"\n", settings.track_name_scheme);
-            cyanrip_log(ctx, 0, "    -L <string>           Log file name scheme, by default its \"%s\"\n", settings.log_name_scheme);
-            cyanrip_log(ctx, 0, "    -M <string>           CUE file name scheme, by default its \"%s\"\n", settings.cue_name_scheme);
-            cyanrip_log(ctx, 0, "    -l <list>             Select which tracks to rip (default: all)\n");
-            cyanrip_log(ctx, 0, "    -T <string>           Filename sanitation: simple, os_simple, unicode (default), os_unicode\n");
-            cyanrip_log(ctx, 0, "\n  Metadata options:\n");
-            cyanrip_log(ctx, 0, "    -I                    Only print CD and track info\n");
-            cyanrip_log(ctx, 0, "    -a <string>           Album metadata, key=value:key=value\n");
-            cyanrip_log(ctx, 0, "    -t <number>=<string>  Track metadata, can be specified multiple times\n");
-            cyanrip_log(ctx, 0, "    -R <int>/<string>     Sets the MusicBrainz release to use, either as an index starting from 1 or an ID string\n");
-            cyanrip_log(ctx, 0, "    -c <int>/<int>        Tag multi-disc albums, syntax is disc/totaldiscs\n");
-            cyanrip_log(ctx, 0, "    -C <title>=<path>     Set cover image path, type may be \"Name\" or a \"track_number\"\n");
-            cyanrip_log(ctx, 0, "    -N                    Disables MusicBrainz lookup and ignores lack of manual metadata\n");
-            cyanrip_log(ctx, 0, "    -A                    Disables AccurateRip database query and validation\n");
-            cyanrip_log(ctx, 0, "    -U                    Disables Cover art DB database query and retrieval\n");
-            cyanrip_log(ctx, 0, "    -m                    Lookup cover art with max size: 250, 500, 1200, -1 (no limit, default)\n");
-            cyanrip_log(ctx, 0, "    -G                    Disables embedding of cover art images\n");
-            cyanrip_log(ctx, 0, "\n  Misc. options:\n");
-            cyanrip_log(ctx, 0, "    -Q                    Eject tray once successfully done\n");
-            cyanrip_log(ctx, 0, "    -V                    Print program version\n");
-            cyanrip_log(ctx, 0, "    -h                    Print options help\n");
-            cyanrip_log(ctx, 0, "    -f                    Find drive offset (requires a disc with an AccuRip DB entry)\n");
+    snprintf(cyanrip_helpstr, sizeof(cyanrip_helpstr),
+             "cyanrip %s (%s)", PROJECT_VERSION_STRING, vcstag);
+
+    GEN_OPT_INIT(opts_list, 64);
+
+    GEN_OPT_SEC(opts_list, "Ripping options");
+    GEN_OPT_ONE(opts_list, char *,  device, "d", 1, 1, NULL, 0, 0,
+                "Set device path (can be a TOC file)");
+    GEN_OPT_ONE(opts_list, int32_t, offset, "s", 1, 1, 0, INT32_MIN, INT32_MAX,
+                "CD drive offset in samples");
+    GEN_OPT_ONE(opts_list, int32_t, retries, "r", 1, 1, 10, 0, INT32_MAX,
+                "Maximum number of retries for frames and repeated rips");
+    GEN_OPT_ONE(opts_list, int32_t, repeat_rips, "Z", 1, 1, 0, 0, INT32_MAX,
+                "Rip tracks until checksums match N times (for damaged CDs)");
+    GEN_OPT_ONE(opts_list, int32_t, speed, "S", 1, 1, 0, 0, INT32_MAX,
+                "Set drive speed");
+    GEN_OPT_ARR(opts_list, char *,  pregap, "p", 0, 0, 198, 0, 0,
+                "Track pregap handling: N=default|drop|merge|track (repeatable)");
+    GEN_OPT_ONE(opts_list, char *,  paranoia, "P", 1, 1, NULL, 0, 0,
+                "Paranoia level (0..max, or 'none'/'max')");
+    GEN_OPT_ONE(opts_list, bool,    overread, "O", 0, 0, 0, 0, 0,
+                "Enable overreading into lead-in and lead-out");
+    GEN_OPT_ONE(opts_list, bool,    hdcd, "H", 0, 0, 0, 0, 0,
+                "Enable HDCD decoding");
+    GEN_OPT_ONE(opts_list, bool,    force_deemphasis, "E", 0, 0, 0, 0, 0,
+                "Force CD deemphasis");
+    GEN_OPT_ONE(opts_list, bool,    no_deemphasis, "W", 0, 0, 0, 0, 0,
+                "Disable automatic CD deemphasis");
+    GEN_OPT_ONE(opts_list, bool,    no_replaygain, "K", 0, 0, 0, 0, 0,
+                "Disable ReplayGain tagging");
+
+    GEN_OPT_SEC(opts_list, "Output options");
+    GEN_OPT_ARR(opts_list, char *,  outputs, "o", ',', 0, 32, 0, 0,
+                "Comma separated list of output formats ('help' lists all)");
+    GEN_OPT_ONE(opts_list, float,   bitrate, "b", 1, 1, 256.0f, 0.0f, 10000.0f,
+                "Bitrate of lossy files in kbps");
+    GEN_OPT_ONE(opts_list, char *,  folder_scheme, "D", 1, 1,
+                settings.folder_name_scheme, 0, 0,
+                "Directory naming scheme");
+    GEN_OPT_ONE(opts_list, char *,  track_scheme, "F", 1, 1,
+                settings.track_name_scheme, 0, 0,
+                "Track naming scheme");
+    GEN_OPT_ONE(opts_list, char *,  log_scheme, "L", 1, 1,
+                settings.log_name_scheme, 0, 0,
+                "Log file name scheme");
+    GEN_OPT_ONE(opts_list, char *,  cue_scheme, "M", 1, 1,
+                settings.cue_name_scheme, 0, 0,
+                "CUE file name scheme");
+    GEN_OPT_ARR(opts_list, int32_t, tracks, "l", ',', 0, 198, 0, 198,
+                "Comma separated list of tracks to rip (default: all)");
+    GEN_OPT_ONE(opts_list, char *,  sanitize, "T", 1, 1, NULL, 0, 0,
+                "Filename sanitation: simple, os_simple, unicode, os_unicode");
+
+    GEN_OPT_SEC(opts_list, "Metadata options");
+    GEN_OPT_ONE(opts_list, bool,    info, "I", 0, 0, 0, 0, 0,
+                "Only print CD and track info");
+    GEN_OPT_ONE(opts_list, char *,  album_meta, "a", 1, 1, NULL, 0, 0,
+                "Album metadata, key=value:key=value");
+    GEN_OPT_ARR(opts_list, char *,  track_meta, "t", 0, 0, 198, 0, 0,
+                "Track metadata as N=key=value:key=value (repeatable)");
+    GEN_OPT_ONE(opts_list, char *,  release, "R", 1, 1, NULL, 0, 0,
+                "MusicBrainz release: 1-based index or ID string");
+    GEN_OPT_ONE(opts_list, char *,  disc, "c", 1, 1, NULL, 0, 0,
+                "Multi-disc tag: disc/totaldiscs");
+    GEN_OPT_ARR(opts_list, char *,  cover, "C", 0, 0, 32, 0, 0,
+                "Cover art: title=path (or N=path per-track, repeatable)");
+    GEN_OPT_ONE(opts_list, bool,    no_musicbrainz, "N", 0, 0, 0, 0, 0,
+                "Disable MusicBrainz lookup");
+    GEN_OPT_ONE(opts_list, bool,    no_accurip, "A", 0, 0, 0, 0, 0,
+                "Disable AccurateRip database query and validation");
+    GEN_OPT_ONE(opts_list, bool,    no_coverart_db, "U", 0, 0, 0, 0, 0,
+                "Disable Cover art DB query and retrieval");
+    GEN_OPT_ONE(opts_list, int32_t, cover_size, "m", 1, 1, -1, -1, 1200,
+                "Cover art max size: 250, 500, 1200, or -1 for original");
+    GEN_OPT_ONE(opts_list, bool,    no_coverart_embed, "G", 0, 0, 0, 0, 0,
+                "Disable embedding of cover art images");
+
+    GEN_OPT_SEC(opts_list, "Misc. options");
+    GEN_OPT_ONE(opts_list, bool,    eject, "Q", 0, 0, 0, 0, 0,
+                "Eject tray once successfully done");
+    GEN_OPT_ONE(opts_list, bool,    find_offset, "f", 0, 0, 0, 0, 0,
+                "Find drive offset (requires a disc with an AccuRip entry)");
+
+    {
+        int r = GEN_OPT_PARSE(NULL, opts_list, argc, argv);
+        if (r == -EAGAIN)
             return 0;
-            break;
-        case 'S':
-            settings.speed = (int)strtol(optarg, NULL, 10);
-            if (settings.speed < 0) {
-                cyanrip_log(ctx, 0, "Invalid drive speed!\n");
-                return 1;
-            }
-            break;
-        case 'P':
-            if (!strcmp(optarg, "none"))
-                settings.paranoia_level = 0;
-            else if (!strcmp(optarg, "max"))
-                settings.paranoia_level = crip_max_paranoia_level;
-            else
-                settings.paranoia_level = (int)strtol(optarg, NULL, 10);
-            if (settings.paranoia_level < 0 || settings.paranoia_level > crip_max_paranoia_level) {
-                cyanrip_log(ctx, 0, "Invalid paranoia level %i must be between 0 and %i!\n",
-                            settings.paranoia_level, crip_max_paranoia_level);
-                return 1;
-            }
-            break;
-        case 'r':
-            settings.max_retries = strtol(optarg, NULL, 10);
-            if (settings.max_retries < 0) {
-                cyanrip_log(ctx, 0, "Invalid retries amount!\n");
-                return 1;
-            }
-            break;
-        case 'R':
-            p = NULL;
-            mb_release_idx = strtol(optarg, &p, 10);
-            if (p != NULL && p[0] != ' ' && p[0] != '\0') {
-                mb_release_str = optarg;
-                mb_release_idx = -1;
-            } else if (mb_release_idx <= 0) {
-                cyanrip_log(ctx, 0, "Invalid release index %i!\n", mb_release_idx);
-                return 1;
-            }
-            break;
-        case 'K':
-            settings.enable_replaygain = 0;
-            break;
-        case 's':
-            settings.offset = strtol(optarg, NULL, 10);
-            int sign = settings.offset < 0 ? -1 : +1;
-            int frames = ceilf(abs(settings.offset)/(float)(CDIO_CD_FRAMESIZE_RAW >> 2));
-            settings.over_under_read_frames = sign*frames;
+        if (r < 0)
+            return 1;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-s") || !strcmp(argv[i], "--offset")) {
             offset_set = 1;
             break;
-        case 'N':
-            settings.disable_mb = 1;
-            break;
-        case 'A':
-            settings.disable_accurip = 1;
-            break;
-        case 'U':
-            settings.disable_coverart_db = 1;
-            break;
-        case 'm':
-            img_size = strtol(optarg, NULL, 10);
-            switch (img_size) {
-            case -1:
-                settings.coverart_lookup_size = COVERART_LOOKUP_SIZE_ORIGINAL;
-                break;
-            case 250:
-                settings.coverart_lookup_size = COVERART_LOOKUP_SIZE_250;
-                break;
-            case 500:
-                settings.coverart_lookup_size = COVERART_LOOKUP_SIZE_500;
-                break;
-            case 1200:
-                settings.coverart_lookup_size = COVERART_LOOKUP_SIZE_1200;
-                break;
-            default:
-                cyanrip_log(ctx, 0, "Invalid max coverart max size %i (must be 250, 500 or 1200)\n", img_size);
-                return 1;
-            }
-            break;
-        case 'b':
-            settings.bitrate = strtof(optarg, NULL);
-            break;
-        case 'l':
-            settings.rip_indices_count = 0;
-            p = av_strtok(optarg, ",", &p_save);
-            while (p) {
-                idx = strtol(p, NULL, 10);
-                for (int i = 0; i < settings.rip_indices_count; i++) {
-                    if (settings.rip_indices[i] == idx) {
-                        cyanrip_log(ctx, 0, "Duplicated rip idx %i\n", idx);
-                        return 1;
-                    }
-                }
-                settings.rip_indices[settings.rip_indices_count++] = idx;
-                p = av_strtok(NULL, ",", &p_save);
-            }
-            qsort(settings.rip_indices, settings.rip_indices_count,
-                  sizeof(int), cmp_numbers);
-            break;
-        case 'o':
-            settings.outputs_num = 0;
-            if (!strncmp("help", optarg, strlen("help"))) {
-                cyanrip_log(ctx, 0, "Supported output codecs:\n");
-                cyanrip_print_codecs();
-                return 0;
-            }
-            p = av_strtok(optarg, ",", &p_save);
-            while (p) {
-                int res = cyanrip_validate_fmt(p);
-                for (int i = 0; i < settings.outputs_num; i++) {
-                    if (settings.outputs[i] == res) {
-                        cyanrip_log(ctx, 0, "Duplicated format \"%s\"\n", p);
-                        return 1;
-                    }
-                }
-                if (res != -1) {
-                    settings.outputs[settings.outputs_num++] = res;
-                } else {
-                    cyanrip_log(ctx, 0, "Invalid format \"%s\"\n", p);
-                    return 1;
-                }
-                p = av_strtok(NULL, ",", &p_save);
-            }
-            break;
-        case 'I':
-            settings.print_info_only = 1;
-            break;
-        case 'G':
-            settings.disable_coverart_embedding = 1;
-            break;
-        case 'H':
-            settings.decode_hdcd = 1;
-            break;
-        case 'O':
-            settings.overread_leadinout = 1;
-            break;
-        case 'Z':
-            settings.ripping_retries = strtol(optarg, NULL, 10);
-            if (settings.ripping_retries < 0) {
-                cyanrip_log(ctx, 0, "Invalid retries amount!\n");
-                return 1;
-            }
-            break;
-        case 'f':
-            find_drive_offset_range = 6;
-            break;
-        case 'c':
-            p = av_strtok(optarg, "/", &p_save);
-            discnumber = strtol(p, NULL, 10);
-            if (discnumber <= 0) {
-                cyanrip_log(ctx, 0, "Invalid discnumber %i\n", discnumber);
-                return 1;
-            }
-            p = av_strtok(NULL, "/", &p_save);
-            if (!p)
-                break;
+        }
+    }
+
+    if (device)
+        settings.dev_path = strdup(device);
+
+    settings.offset = offset;
+    settings.over_under_read_frames =
+        (offset < 0 ? -1 : 1) *
+        (int)ceilf(abs(offset) / (float)(CDIO_CD_FRAMESIZE_RAW >> 2));
+
+    settings.max_retries                = retries;
+    settings.ripping_retries            = repeat_rips;
+    settings.speed                      = speed;
+    settings.bitrate                    = bitrate;
+    settings.overread_leadinout         = overread;
+    settings.decode_hdcd                = hdcd;
+    settings.force_deemphasis           = force_deemphasis;
+    settings.deemphasis                 = !no_deemphasis;
+    settings.enable_replaygain          = !no_replaygain;
+    settings.disable_mb                 = no_musicbrainz;
+    settings.disable_accurip            = no_accurip;
+    settings.disable_coverart_db        = no_coverart_db;
+    settings.disable_coverart_embedding = no_coverart_embed;
+    settings.print_info_only            = info;
+    settings.eject_on_success_rip       = eject;
+    settings.folder_name_scheme         = folder_scheme;
+    settings.track_name_scheme          = track_scheme;
+    settings.log_name_scheme            = log_scheme;
+    settings.cue_name_scheme            = cue_scheme;
+
+    find_drive_offset_range = find_offset ? 6 : 0;
+    album_metadata_ptr = album_meta;
+
+    if (paranoia) {
+        if (!strcmp(paranoia, "none"))
+            settings.paranoia_level = 0;
+        else if (!strcmp(paranoia, "max"))
+            settings.paranoia_level = crip_max_paranoia_level;
+        else
+            settings.paranoia_level = (int)strtol(paranoia, NULL, 10);
+        if (settings.paranoia_level < 0 ||
+            settings.paranoia_level > crip_max_paranoia_level) {
+            cyanrip_log(ctx, 0,
+                        "Invalid paranoia level %i must be between 0 and %i!\n",
+                        settings.paranoia_level, crip_max_paranoia_level);
+            return 1;
+        }
+    }
+
+    switch (cover_size) {
+    case -1:   settings.coverart_lookup_size = COVERART_LOOKUP_SIZE_ORIGINAL; break;
+    case 250:  settings.coverart_lookup_size = COVERART_LOOKUP_SIZE_250;      break;
+    case 500:  settings.coverart_lookup_size = COVERART_LOOKUP_SIZE_500;      break;
+    case 1200: settings.coverart_lookup_size = COVERART_LOOKUP_SIZE_1200;     break;
+    default:
+        cyanrip_log(ctx, 0,
+                    "Invalid max coverart size %i (must be 250, 500, 1200 or -1)\n",
+                    cover_size);
+        return 1;
+    }
+
+    if (sanitize) {
+        if      (!strcmp(sanitize, "simple"))     settings.sanitize_method = CRIP_SANITIZE_SIMPLE;
+        else if (!strcmp(sanitize, "os_simple"))  settings.sanitize_method = CRIP_SANITIZE_OS_SIMPLE;
+        else if (!strcmp(sanitize, "unicode"))    settings.sanitize_method = CRIP_SANITIZE_UNICODE;
+        else if (!strcmp(sanitize, "os_unicode")) settings.sanitize_method = CRIP_SANITIZE_OS_UNICODE;
+        else {
+            cyanrip_log(ctx, 0, "Invalid sanitation method %s\n", sanitize);
+            return 1;
+        }
+    }
+
+    if (release) {
+        p = NULL;
+        mb_release_idx = strtol(release, &p, 10);
+        if (p != NULL && p[0] != ' ' && p[0] != '\0') {
+            mb_release_str = release;
+            mb_release_idx = -1;
+        } else if (mb_release_idx <= 0) {
+            cyanrip_log(ctx, 0, "Invalid release index %i!\n", mb_release_idx);
+            return 1;
+        }
+    }
+
+    if (disc) {
+        p = av_strtok(disc, "/", &p_save);
+        discnumber = strtol(p, NULL, 10);
+        if (discnumber <= 0) {
+            cyanrip_log(ctx, 0, "Invalid discnumber %i\n", discnumber);
+            return 1;
+        }
+        p = av_strtok(NULL, "/", &p_save);
+        if (p) {
             totaldiscs = strtol(p, NULL, 10);
             if (totaldiscs <= 0) {
                 cyanrip_log(ctx, 0, "Invalid totaldiscs %i\n", totaldiscs);
                 return 1;
             }
             if (discnumber > totaldiscs) {
-                cyanrip_log(ctx, 0, "discnumber %i is larger than totaldiscs %i\n", discnumber, totaldiscs);
+                cyanrip_log(ctx, 0,
+                            "discnumber %i is larger than totaldiscs %i\n",
+                            discnumber, totaldiscs);
                 return 1;
             }
-            break;
-        case 'p':
-            p = av_strtok(optarg, "=", &p_save);
-            idx = strtol(p, NULL, 10);
-            if (idx < 1 || idx > 197) {
-                cyanrip_log(ctx, 0, "Invalid track idx for pregap: %i\n", idx);
-                return 1;
-            }
-            enum cyanrip_pregap_action act = CYANRIP_PREGAP_DEFAULT;
-            p = av_strtok(NULL, "=", &p_save);
-            if (!p) {
-                cyanrip_log(ctx, 0, "Missing pregap action\n");
-                return 1;
-            }
-            if (!strncmp(p, "default", strlen("default"))) {
-                act = CYANRIP_PREGAP_DEFAULT;
-            } else if (!strncmp(p, "drop", strlen("drop"))) {
-                act = CYANRIP_PREGAP_DROP;
-            } else if (!strncmp(p, "merge", strlen("merge"))) {
-                act = CYANRIP_PREGAP_MERGE;
-            } else if (!strncmp(p, "track", strlen("track"))) {
-                act = CYANRIP_PREGAP_TRACK;
-            } else {
-                cyanrip_log(ctx, 0, "Invalid pregap action %s\n", p);
-                return 1;
-            }
-            settings.pregap_action[idx - 1] = act;
-            break;
-        case 'C':
-            p = av_strtok(optarg, "=", &p_save);
-            char *next = av_strtok(NULL, "=", &p_save);
-            CRIPArt *dst = NULL;
-
-            if (!next) {
-                int have_front = 0;
-                int have_back = 0;
-                for (int i = 0; i < nb_cover_arts; i++) {
-                    if (!strcmp(cover_arts[i].title, "Front"))
-                        have_front = 1;
-                    if (!strcmp(cover_arts[i].title, "Back"))
-                        have_back = 1;
-                }
-                if (!have_front) {
-                    next = p;
-                    p = "Front";
-                } else if (!have_back) {
-                    next = p;
-                    p = "Back";
-                } else {
-                    cyanrip_log(ctx, 0, "No cover art location specified for \"%s\"\n", p);
-                    return 1;
-                }
-            }
-
-            if (crip_is_integer(p)) {
-                idx = strtol(p, NULL, 10);
-                if (idx < 0 || idx > 198) {
-                    cyanrip_log(ctx, 0, "Invalid track idx for cover art: %i\n", idx);
-                    return 1;
-                }
-                for (int i = 0; i < nb_track_cover_arts; i++) {
-                    if (track_cover_arts_map[i] == idx) {
-                        cyanrip_log(ctx, 0, "Cover art already specified for track idx %i!\n", idx);
-                        return 1;
-                    }
-                }
-                track_cover_arts_map[nb_track_cover_arts] = idx;
-                dst = &track_cover_arts[nb_track_cover_arts++];
-                p = "title";
-            } else {
-                for (int i = 0; i < nb_cover_arts; i++) {
-                    if (!strcmp(cover_arts[i].title, p)) {
-                        cyanrip_log(ctx, 0, "Cover art \"%s\" already specified!\n", p);
-                        return 1;
-                    }
-                }
-
-                dst = &cover_arts[nb_cover_arts++];
-                if (nb_cover_arts > 31) {
-                    cyanrip_log(ctx, 0, "Too many cover arts specified!\n");
-                    return 1;
-                }
-            }
-
-            dst->source_url = next;
-            dst->title = p;
-            break;
-        case 'E':
-            settings.force_deemphasis = 1;
-            break;
-        case 'W':
-            settings.deemphasis = 0;
-            break;
-        case 'Q':
-            settings.eject_on_success_rip = 1;
-            break;
-        case 'D':
-            settings.folder_name_scheme = optarg;
-            break;
-        case 'F':
-            settings.track_name_scheme = optarg;
-            break;
-        case 'L':
-            settings.log_name_scheme = optarg;
-            break;
-        case 'M':
-            settings.cue_name_scheme = optarg;
-            break;
-        case 'T':
-            if (!strncmp(optarg, "simple", strlen("simple"))) {
-                settings.sanitize_method = CRIP_SANITIZE_SIMPLE;
-            } else if (!strncmp(optarg, "os_simple", strlen("os_simple"))) {
-                settings.sanitize_method = CRIP_SANITIZE_OS_SIMPLE;
-            } else if (!strncmp(optarg, "unicode", strlen("unicode"))) {
-                settings.sanitize_method = CRIP_SANITIZE_UNICODE;
-            } else if (!strncmp(optarg, "os_unicode", strlen("os_unicode"))) {
-                settings.sanitize_method = CRIP_SANITIZE_OS_UNICODE;
-            } else {
-                cyanrip_log(ctx, 0, "Invalid sanitation method %s\n", optarg);
-                return 1;
-            }
-            break;
-        case 'V':
-            cyanrip_log(ctx, 0, "cyanrip %s (%s)\n", PROJECT_VERSION_STRING, vcstag);
-            return 0;
-        case 'd':
-            settings.dev_path = strdup(optarg);
-            break;
-        case '?':
-            return 1;
-            break;
-        case 'a':
-            album_metadata_ptr = optarg;
-            break;
-        case 't':
-            track_metadata_ptr[track_metadata_ptr_cnt++] = optarg;
-            break;
-        default:
-            abort();
-            break;
         }
     }
+
+    int nb_outputs = 0;
+    while (nb_outputs < 32 && outputs[nb_outputs])
+        nb_outputs++;
+    if (nb_outputs > 0) {
+        if (!strcmp(outputs[0], "help")) {
+            cyanrip_log(ctx, 0, "Supported output codecs:\n");
+            cyanrip_print_codecs();
+            return 0;
+        }
+        settings.outputs_num = 0;
+        for (int i = 0; i < nb_outputs; i++) {
+            int res = cyanrip_validate_fmt(outputs[i]);
+            if (res == -1) {
+                cyanrip_log(ctx, 0, "Invalid format \"%s\"\n", outputs[i]);
+                return 1;
+            }
+            for (int k = 0; k < settings.outputs_num; k++) {
+                if (settings.outputs[k] == res) {
+                    cyanrip_log(ctx, 0, "Duplicated format \"%s\"\n", outputs[i]);
+                    return 1;
+                }
+            }
+            settings.outputs[settings.outputs_num++] = res;
+        }
+    }
+
+    int nb_track_indices = genopt_nb_vals(opts_list, opts_list_nb, "tracks");
+    if (nb_track_indices > 0) {
+        settings.rip_indices_count = 0;
+        for (int i = 0; i < nb_track_indices; i++) {
+            int t = tracks[i];
+            for (int k = 0; k < settings.rip_indices_count; k++) {
+                if (settings.rip_indices[k] == t) {
+                    cyanrip_log(ctx, 0, "Duplicated rip idx %i\n", t);
+                    return 1;
+                }
+            }
+            settings.rip_indices[settings.rip_indices_count++] = t;
+        }
+        qsort(settings.rip_indices, settings.rip_indices_count,
+              sizeof(int), cmp_numbers);
+    }
+
+    for (int i = 0; i < 198 && pregap[i]; i++) {
+        p = av_strtok(pregap[i], "=", &p_save);
+        idx = strtol(p, NULL, 10);
+        if (idx < 1 || idx > 197) {
+            cyanrip_log(ctx, 0, "Invalid track idx for pregap: %i\n", idx);
+            return 1;
+        }
+        enum cyanrip_pregap_action act = CYANRIP_PREGAP_DEFAULT;
+        p = av_strtok(NULL, "=", &p_save);
+        if (!p) {
+            cyanrip_log(ctx, 0, "Missing pregap action\n");
+            return 1;
+        }
+        if      (!strncmp(p, "default", strlen("default"))) act = CYANRIP_PREGAP_DEFAULT;
+        else if (!strncmp(p, "drop",    strlen("drop")))    act = CYANRIP_PREGAP_DROP;
+        else if (!strncmp(p, "merge",   strlen("merge")))   act = CYANRIP_PREGAP_MERGE;
+        else if (!strncmp(p, "track",   strlen("track")))   act = CYANRIP_PREGAP_TRACK;
+        else {
+            cyanrip_log(ctx, 0, "Invalid pregap action %s\n", p);
+            return 1;
+        }
+        settings.pregap_action[idx - 1] = act;
+    }
+
+    for (int i = 0; i < 198 && track_meta[i]; i++)
+        track_metadata_ptr[track_metadata_ptr_cnt++] = track_meta[i];
+
+    for (int i = 0; i < 32 && cover[i]; i++) {
+        p = av_strtok(cover[i], "=", &p_save);
+        char *next = av_strtok(NULL, "=", &p_save);
+        CRIPArt *dst = NULL;
+
+        if (!next) {
+            int have_front = 0;
+            int have_back = 0;
+            for (int k = 0; k < nb_cover_arts; k++) {
+                if (!strcmp(cover_arts[k].title, "Front")) have_front = 1;
+                if (!strcmp(cover_arts[k].title, "Back"))  have_back  = 1;
+            }
+            if (!have_front) {
+                next = p;
+                p = "Front";
+            } else if (!have_back) {
+                next = p;
+                p = "Back";
+            } else {
+                cyanrip_log(ctx, 0,
+                            "No cover art location specified for \"%s\"\n", p);
+                return 1;
+            }
+        }
+
+        if (crip_is_integer(p)) {
+            idx = strtol(p, NULL, 10);
+            if (idx < 0 || idx > 198) {
+                cyanrip_log(ctx, 0,
+                            "Invalid track idx for cover art: %i\n", idx);
+                return 1;
+            }
+            for (int k = 0; k < nb_track_cover_arts; k++) {
+                if (track_cover_arts_map[k] == idx) {
+                    cyanrip_log(ctx, 0,
+                                "Cover art already specified for track idx %i!\n",
+                                idx);
+                    return 1;
+                }
+            }
+            track_cover_arts_map[nb_track_cover_arts] = idx;
+            dst = &track_cover_arts[nb_track_cover_arts++];
+            p = "title";
+        } else {
+            for (int k = 0; k < nb_cover_arts; k++) {
+                if (!strcmp(cover_arts[k].title, p)) {
+                    cyanrip_log(ctx, 0, "Cover art \"%s\" already specified!\n", p);
+                    return 1;
+                }
+            }
+            dst = &cover_arts[nb_cover_arts++];
+            if (nb_cover_arts > 31) {
+                cyanrip_log(ctx, 0, "Too many cover arts specified!\n");
+                return 1;
+            }
+        }
+        dst->source_url = next;
+        dst->title = p;
+    }
+
 
     if (settings.outputs_num > 1 && !strstr(settings.folder_name_scheme, "{format}")) {
         cyanrip_log(ctx, 0, "Directory name scheme must contain {format} with multiple output formats!\n");
