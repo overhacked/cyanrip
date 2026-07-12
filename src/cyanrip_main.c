@@ -626,9 +626,6 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
         return 0;
     }
 
-    /* Hopefully reduce seeking by reading this here */
-    track_read_extra(ctx, t);
-
     /* Set creation time at the start of ripping */
     track_set_creation_time(ctx, t);
 
@@ -2231,6 +2228,10 @@ int main(int argc, char **argv)
                 /* Initialize, unless the track is data, which is never
                  * decoded or encoded */
                 if (!t->track_is_data) {
+                    /* Read ISRC and the preemphasis flags before creating
+                     * the decoder, which needs them to decide on deemphasis */
+                    track_read_extra(ctx, t);
+
                     int ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
                     if (ret < 0) {
                         cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
@@ -2353,6 +2354,10 @@ int main(int argc, char **argv)
              * decoded or encoded */
             int ret = 0;
             if (!t->track_is_data) {
+                /* Read ISRC and the preemphasis flags before creating
+                 * the decoder, which needs them to decide on deemphasis */
+                track_read_extra(ctx, t);
+
                 ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
                 if (ret < 0) {
                     cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
