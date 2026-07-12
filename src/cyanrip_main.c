@@ -2168,6 +2168,7 @@ int main(int argc, char **argv)
                     int ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
                     if (ret < 0) {
                         cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
+                        ctx->total_error_count++;
                         goto end;
                     }
 
@@ -2176,6 +2177,7 @@ int main(int argc, char **argv)
                                                           ctx->settings.outputs[j]);
                         if (ret < 0) {
                             cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
+                            ctx->total_error_count++;
                             goto end;
                         }
                     }
@@ -2288,6 +2290,7 @@ int main(int argc, char **argv)
                 ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
                 if (ret < 0) {
                     cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
+                    ctx->total_error_count++;
                     goto end;
                 }
 
@@ -2296,6 +2299,7 @@ int main(int argc, char **argv)
                                                       ctx->settings.outputs[j]);
                     if (ret < 0) {
                         cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
+                        ctx->total_error_count++;
                         goto end;
                     }
                 }

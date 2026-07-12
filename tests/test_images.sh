@@ -109,6 +109,15 @@ expect hdcd 1.flac:4:s32 2.flac:4:s32 log.log sheet.cue
 rip deemph basic.cue -E
 expect deemph 1.flac:4 2.flac:4 log.log sheet.cue
 
+# Encoder init failure (file name too long) must fail cleanly, not
+# crash in cleanup on the uninitialized encoder mutex/thread
+longname=$(printf 'x%.0s' $(seq 1 300))
+timeout 60 "$CRIP" -d "$WORK/basic.cue" -N -A -U -s 0 -P 0 -K -o flac \
+    -D "$WORK/out_longname" -F "$longname" -L log -M sheet \
+    > "$WORK/longname.log" 2>&1
+ec=$?
+[ "$ec" -eq 1 ] || fail "longname: expected clean failure (1), got exit $ec"
+
 if [ "$FAILS" -gt 0 ]; then
     echo "$FAILS check(s) failed"
     exit 1
