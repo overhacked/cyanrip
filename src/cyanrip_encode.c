@@ -1076,6 +1076,9 @@ fail:
 
 int cyanrip_writeout_track(cyanrip_ctx *ctx, cyanrip_enc_ctx *s)
 {
+    if (!s)
+        return 0;
+
     if (s->mutex_held) {
         pthread_mutex_unlock(&s->lock);
         s->mutex_held = 0;

@@ -2162,19 +2162,22 @@ int main(int argc, char **argv)
                     break;
                 }
             } else {
-                /* Initialize */
-                int ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
-                if (ret < 0) {
-                    cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
-                    goto end;
-                }
-
-                for (int j = 0; j < ctx->settings.outputs_num; j++) {
-                    ret = cyanrip_init_track_encoding(ctx, &t->enc_ctx[j], t,
-                                                      ctx->settings.outputs[j]);
+                /* Initialize, unless the track is data, which is never
+                 * decoded or encoded */
+                if (!t->track_is_data) {
+                    int ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
                     if (ret < 0) {
-                        cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
+                        cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
                         goto end;
+                    }
+
+                    for (int j = 0; j < ctx->settings.outputs_num; j++) {
+                        ret = cyanrip_init_track_encoding(ctx, &t->enc_ctx[j], t,
+                                                          ctx->settings.outputs[j]);
+                        if (ret < 0) {
+                            cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
+                            goto end;
+                        }
                     }
                 }
 
@@ -2198,6 +2201,9 @@ int main(int argc, char **argv)
              */
             for (int i = 0; i < ctx->nb_tracks; i++) {
                 cyanrip_track *t = &ctx->tracks[i];
+
+                if (t->track_is_data)
+                    continue;
 
                 for (int j = 0; j < ctx->settings.outputs_num; j++) {
                     int ret = cyanrip_writeout_track(ctx, t->enc_ctx[j]);
@@ -2275,19 +2281,23 @@ int main(int argc, char **argv)
 
             cyanrip_track *t = &ctx->tracks[j];
 
-            /* Initialize */
-            int ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
-            if (ret < 0) {
-                cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
-                goto end;
-            }
-
-            for (j = 0; j < ctx->settings.outputs_num; j++) {
-                ret = cyanrip_init_track_encoding(ctx, &t->enc_ctx[j], t,
-                                                  ctx->settings.outputs[j]);
+            /* Initialize, unless the track is data, which is never
+             * decoded or encoded */
+            int ret = 0;
+            if (!t->track_is_data) {
+                ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
                 if (ret < 0) {
-                    cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
+                    cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
                     goto end;
+                }
+
+                for (j = 0; j < ctx->settings.outputs_num; j++) {
+                    ret = cyanrip_init_track_encoding(ctx, &t->enc_ctx[j], t,
+                                                      ctx->settings.outputs[j]);
+                    if (ret < 0) {
+                        cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
+                        goto end;
+                    }
                 }
             }
 
@@ -2320,6 +2330,9 @@ int main(int argc, char **argv)
                 }
 
                 cyanrip_track *t = &ctx->tracks[j];
+
+                if (t->track_is_data)
+                    continue;
 
                 for (j = 0; j < ctx->settings.outputs_num; j++) {
                     int ret = cyanrip_writeout_track(ctx, t->enc_ctx[j]);
