@@ -1110,8 +1110,8 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
     cyanrip_log(ctx, 0, "%s\n", gaps ? "" : "    None signalled\n");
 }
 
-/* Key 1 and 2 must be set, and src will be modified */
-static char *append_missing_keys(char *src, const char *key1, const char *key2)
+/* Key 1 and 2 must be set */
+static char *append_missing_keys(const char *src, const char *key1, const char *key2)
 {
     /* Copy string with enough space to append extra */
     char *copy = av_mallocz(strlen(src) + strlen(key1) + strlen(key2) + 1);
@@ -1120,18 +1120,30 @@ static char *append_missing_keys(char *src, const char *key1, const char *key2)
     int add_key1_offset = -1;
     int add_key2_offset = -1;
 
-    /* Look for keyless entries */
-    int count = 0;
-    char *p_save, *p = av_strtok(src, ":", &p_save);
-    while (p) {
-        if (!strstr(p, "=")) {
-            if (count == 0)
-                add_key1_offset = p - src;
-            else if (count == 1)
-                add_key2_offset = p - src;
+    /* Look for keyless entries in the first two, minding "\:" and "\="
+     * escapes, which the dictionary parser will consume later */
+    int count = 0, has_key = 0, esc = 0;
+    int entry_start = 0;
+    for (int i = 0; count < 2; i++) {
+        char c = src[i];
+        if (esc) {
+            esc = 0;
+        } else if (c == '\\') {
+            esc = 1;
+        } else if (c == '=') {
+            has_key = 1;
+        } else if (c == ':' || c == '\0') {
+            if (!has_key && i > entry_start) {
+                if (count == 0)
+                    add_key1_offset = entry_start;
+                else
+                    add_key2_offset = entry_start;
+            }
+            count++;
+            entry_start = i + 1;
+            has_key = 0;
         }
-        p = av_strtok(NULL, ":", &p_save);
-        if (++count >= 2)
+        if (!c)
             break;
     }
 
