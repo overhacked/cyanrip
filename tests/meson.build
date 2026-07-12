@@ -37,6 +37,7 @@ rip_scenarios = [
     'nrg',
     'filters',
     'art',
+    'cue_only',
     'errors',
     'verify_log',
 ]

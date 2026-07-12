@@ -165,6 +165,26 @@ def sc_art():
                 fail(f"art: {f}.flac picture type {ptype!r}")
 
 
+def sc_cue_only():
+    # -J generates and prints the CUE sheet without ripping anything
+    rip("cue", "pregap.cue", "-J")
+    have = sorted(p.name for p in (WORK / "out_cue").iterdir())
+    if have != ["sheet.cue"]:
+        fail(f"cue_only: outputs {have}, wanted only the CUE sheet")
+
+    cue = (WORK / "out_cue" / "sheet.cue").read_text()
+    if 'FILE "1.flac" WAVE' not in cue:
+        fail("cue_only: file references are not relative to the sheet")
+    if "TRACK 03 AUDIO" not in cue:
+        fail("cue_only: cue sheet incomplete")
+
+    if "TRACK 01 AUDIO" not in (WORK / "cue.log").read_text():
+        fail("cue_only: cue sheet not printed to the terminal")
+
+    if crip("-d", WORK / "basic.cue", "-J", "-I")[0] != 1:
+        fail("cue_only: -J with -I did not error out")
+
+
 def sc_errors():
     # Schemes sending multiple tracks to one file must be warned about
     rip("collide", "basic.cue", "-F", "{album}")
