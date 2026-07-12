@@ -7,6 +7,27 @@ on:
     types: [ released ]
 
 jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build pkg-config ffmpeg \
+            libavcodec-dev libavformat-dev libavfilter-dev libavutil-dev \
+            libswresample-dev libcdio-dev libcdio-cdda-dev libcdio-paranoia-dev \
+            libmusicbrainz5-dev libcurl4-openssl-dev
+
+      - name: Build
+        run: |
+          meson setup build
+          ninja -C build
+
+      - name: Test
+        run: meson test -C build --print-errorlogs
+
   mingw:
     runs-on: windows-latest
     env:

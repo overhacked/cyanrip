@@ -27,6 +27,7 @@ endif
 cc = meson.get_compiler('c')
 
 subdir('src')
+subdir('tests')
 
 configure_file(
     output: 'config.h',

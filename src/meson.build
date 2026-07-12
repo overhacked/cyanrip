@@ -67,7 +67,7 @@ endif
 
 add_global_arguments(build_opts, language: 'c')
 
-executable('cyanrip',
+cyanrip_exe = executable('cyanrip',
     install: true,
     sources: sources,
     dependencies: dependencies,
