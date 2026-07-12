@@ -18,6 +18,7 @@
 
 #include "cyanrip_log.h"
 #include "cue_writer.h"
+#include "os_compat.h"
 
 int cyanrip_cue_init(cyanrip_ctx *ctx)
 {
@@ -102,12 +103,17 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
                                    t->track_is_data ? CRIP_PATH_DATA : CRIP_PATH_TRACK,
                                    0, &crip_fmt_info[ctx->settings.outputs[Z]],
                                    t);
+        /* Reference the file relative to the CUE sheet's own directory */
         char *name = path;
-        for (int i = 0; name[i]; i++) {
-            if (name[i] == '/') {
-                name = &name[i + 1];
-                break;
-            }
+        char *cuepath = crip_get_path(ctx, CRIP_PATH_CUE, 0,
+                                      &crip_fmt_info[ctx->settings.outputs[Z]],
+                                      NULL);
+        if (cuepath) {
+            char *sep = strrchr(cuepath, OS_DIR_CHAR);
+            size_t plen = sep ? (sep - cuepath) + 1 : 0;
+            if (plen && !strncmp(path, cuepath, plen))
+                name = path + plen;
+            av_free(cuepath);
         }
 
         fprintf(ctx->cuefile[Z], "FILE \"%s\" %s\n", name,
