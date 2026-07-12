@@ -1159,6 +1159,14 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         s->st_img->disposition |= AV_DISPOSITION_ATTACHED_PIC;
         s->st_img->time_base = (AVRational){ 1, 25 };
         av_dict_copy(&s->st_img->metadata, art->meta, 0);
+
+        /* Muxers derive the attached picture type from this tag, without
+         * it the picture is typed "Other" and not thumbnailed by players */
+        const char *title = dict_get(art->meta, "title");
+        av_dict_set(&s->st_img->metadata, "comment",
+                    title && !strcmp(title, "Back") ? "Cover (back)" :
+                                                      "Cover (front)", 0);
+
         s->cover_art_pkt = av_packet_clone(art->pkt);
     }
 

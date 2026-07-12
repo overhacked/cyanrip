@@ -158,6 +158,12 @@ def sc_art():
             if len(pics.splitlines()) != 1:
                 fail(f"art: {f}.flac embedded pictures: {pics!r}, wanted 1")
 
+            # Typed as a front cover, or file managers won't thumbnail it
+            ptype = probe(WORK / "out_art" / f"{f}.flac", "-select_streams",
+                          "v", "-show_entries", "stream_tags=comment")
+            if ptype != "Cover (front)":
+                fail(f"art: {f}.flac picture type {ptype!r}")
+
 
 def sc_errors():
     # Schemes sending multiple tracks to one file must be warned about
