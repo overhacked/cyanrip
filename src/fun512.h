@@ -18,16 +18,26 @@
 
 #pragma once
 
-#include "cyanrip_main.h"
+#include <stdint.h>
 
-int cyanrip_log_init(cyanrip_ctx *ctx);
-void cyanrip_log_end(cyanrip_ctx *ctx);
+#define CRIP_LOG_FUN512_MARKER "Log FUN512: "
 
-void cyanrip_log_start_report(cyanrip_ctx *ctx);
-void cyanrip_log_finish_report(cyanrip_ctx *ctx);
-void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t);
+/* base64 of 64 bytes, including padding and NUL */
+#define CRIP_FUN512_STR_SIZE 89
 
-void cyanrip_set_av_log_capture(cyanrip_ctx *ctx, int enable,
-                                int max_av_lvl);
+/* Compute the FUN512 string of a SHA-512 digest. idx is the index of the
+ * output format the log belongs to, each simultaneous output is permuted
+ * differently. */
+void crip_log_fun512(const uint8_t *sha512_digest, int idx,
+                     char digest_str[CRIP_FUN512_STR_SIZE]);
 
-void cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...);
+enum CRIPLogVerify {
+    CRIP_LOG_VALID = 0,
+    CRIP_LOG_MISMATCH,
+    CRIP_LOG_NO_CHECKSUM,
+    CRIP_LOG_TRAILING_DATA,
+    CRIP_LOG_IO_ERROR,
+};
+
+/* Check a written log against its FUN512 checksum line */
+enum CRIPLogVerify cyanrip_verify_log(const char *path);

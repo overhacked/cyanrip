@@ -29,6 +29,7 @@
 
 #include "cyanrip_main.h"
 #include "cyanrip_log.h"
+#include "fun512.h"
 #include "cue_writer.h"
 #include "checksums.h"
 #include "discid.h"
@@ -1668,8 +1669,29 @@ int main(int argc, char **argv)
         }
     }
 
-    if (verify_log)
-        return cyanrip_verify_log(verify_log);
+    if (verify_log) {
+        switch (cyanrip_verify_log(verify_log)) {
+        case CRIP_LOG_VALID:
+            cyanrip_log(NULL, 0, "Log \"%s\" checksum valid.\n", verify_log);
+            return 0;
+        case CRIP_LOG_MISMATCH:
+            cyanrip_log(NULL, 0, "Log \"%s\" checksum mismatch, "
+                        "the file has been modified!\n", verify_log);
+            break;
+        case CRIP_LOG_TRAILING_DATA:
+            cyanrip_log(NULL, 0, "Log \"%s\" has data after the checksum, "
+                        "the file has been modified!\n", verify_log);
+            break;
+        case CRIP_LOG_NO_CHECKSUM:
+            cyanrip_log(NULL, 0, "No FUN512 checksum found in \"%s\"!\n",
+                        verify_log);
+            break;
+        case CRIP_LOG_IO_ERROR:
+            cyanrip_log(NULL, 0, "Couldn't read \"%s\"!\n", verify_log);
+            break;
+        }
+        return 1;
+    }
 
     if (device)
         settings.dev_path = strdup(device);

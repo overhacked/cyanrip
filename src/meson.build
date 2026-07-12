@@ -41,6 +41,7 @@ sources = [
     'cyanrip_encode.c',
     'cyanrip_log.c',
     'cyanrip_main.c',
+    'fun512.c',
     'utils.c',
 
     'fifo_frame.c',
