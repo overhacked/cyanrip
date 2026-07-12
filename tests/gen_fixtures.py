@@ -137,6 +137,10 @@ def main():
             decode(samples[5], 15, 2)
     gen_bins(audio)
     gen_nrg(audio)
+
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi",
+                    "-i", "color=red:size=8x8", "-frames:v", "1",
+                    str(FIXTURES / "art.png")], check=True)
     print("fixtures written to", FIXTURES)
 
 

@@ -109,6 +109,33 @@ expect hdcd 1.flac:4:s32 2.flac:4:s32 log.log sheet.cue
 rip deemph basic.cue -E
 expect deemph 1.flac:4 2.flac:4 log.log sheet.cue
 
+# Album cover art: written out per format and embedded in every track
+rip art basic.cue -C "Front=$FIX/art.png"
+expect art 1.flac:4 2.flac:4 Front.png log.log sheet.cue
+if [ -n "$FFPROBE" ]; then
+    for f in 1 2; do
+        nb=$("$FFPROBE" -v error -select_streams v -show_entries stream=codec_name \
+             -of csv=p=0 "$WORK/out_art/$f.flac" | grep -c .)
+        [ "$nb" -eq 1 ] || fail "art: $f.flac has $nb embedded pictures, wanted 1"
+    done
+fi
+
+# Naming schemes: subdirectories, conditionals, tag values with escaped
+# separators, and disc number prefixes
+rip scheme basic.cue -c 2/3 -a 'album=CI Album:date=2020-01-01' \
+    -D "$WORK/out_scheme/{album} ({year})" \
+    -F '{if #totaldiscs# > #1#|disc|.}{track} - {title}' \
+    -t '1=title=One\: Two' -t '2=title=Three'
+d="$WORK/out_scheme/CI Album (2020)"
+[ -f "$d/2.1 - One∶ Two.flac" ] || \
+    fail "scheme: missing '2.1 - One∶ Two.flac', have: $(ls "$d" 2>/dev/null | tr '\n' ' ')"
+[ -f "$d/2.2 - Three.flac" ] || fail "scheme: missing '2.2 - Three.flac'"
+
+# Schemes sending multiple tracks to one file must be warned about
+rip collide basic.cue -F '{album}'
+grep -q "resolve to the same file" "$WORK/collide.log" || \
+    fail "collide: expected a filename collision warning"
+
 # Encoder init failure (file name too long) must fail cleanly, not
 # crash in cleanup on the uninitialized encoder mutex/thread
 longname=$(printf 'x%.0s' $(seq 1 300))
