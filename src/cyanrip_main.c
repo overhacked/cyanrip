@@ -1228,6 +1228,8 @@ int main(int argc, char **argv)
     GEN_OPT_SEC(opts_list, "Metadata options");
     GEN_OPT_ONE(opts_list, bool,    info, "I", 0, 0, 0, 0, 0,
                 "Only print CD and track info");
+    GEN_OPT_ONE(opts_list, bool,    cue_only, "J", 0, 0, 0, 0, 0,
+                "Only generate and print a CUE sheet, don't rip");
     GEN_OPT_ONE(opts_list, char *,  album_meta, "a", 1, 1, NULL, 0, 0,
                 "Album metadata, key=value:key=value");
     GEN_OPT_ARR(opts_list, char *,  track_meta, "t", 0, 0, 198, 0, 0,
@@ -1318,6 +1320,7 @@ int main(int argc, char **argv)
     settings.disable_coverart_db        = no_coverart_db;
     settings.disable_coverart_embedding = no_coverart_embed;
     settings.print_info_only            = info;
+    settings.generate_cue_only          = cue_only;
     settings.eject_on_success_rip       = eject;
     settings.folder_name_scheme         = folder_scheme;
     settings.track_name_scheme          = track_scheme;
@@ -1540,6 +1543,17 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (settings.print_info_only && settings.generate_cue_only) {
+        cyanrip_log(ctx, 0, "-J (only generate a CUE sheet) cannot be used with -I (only print info)!\n");
+        return 1;
+    }
+
+    if (settings.generate_cue_only) {
+        /* No audio is read or checksummed, and no files to embed art into */
+        settings.disable_accurip = 1;
+        settings.disable_coverart_db = 1;
+    }
+
     if (find_drive_offset_range) {
         settings.disable_accurip = 0;
         settings.disable_mb = 1;
@@ -1691,7 +1705,7 @@ int main(int argc, char **argv)
 
     /* Create log file */
     if (!ctx->settings.print_info_only) {
-        if (cyanrip_log_init(ctx))
+        if (!ctx->settings.generate_cue_only && cyanrip_log_init(ctx))
             return 1;
         if (cyanrip_cue_init(ctx))
             return 1;
@@ -1757,6 +1771,27 @@ int main(int argc, char **argv)
             ctx->total_error_count++;
             goto end;
         }
+    }
+
+    /* Only generate the CUE sheet, print it, and exit */
+    if (ctx->settings.generate_cue_only) {
+        for (int i = 0; i < ctx->nb_tracks; i++) {
+            cyanrip_track *t = &ctx->tracks[i];
+            track_read_extra(ctx, t); /* ISRC and preemphasis flags */
+            cyanrip_cue_track(ctx, t);
+        }
+
+        /* Print it to the terminal too. The log files were never
+         * opened in this mode, so this only goes to stdout. */
+        if (ctx->cuefile[0]) {
+            char line[4096];
+            cyanrip_log(ctx, 0, "\n");
+            rewind(ctx->cuefile[0]);
+            while (fgets(line, sizeof(line), ctx->cuefile[0]))
+                cyanrip_log(ctx, 0, "%s", line);
+        }
+
+        goto end;
     }
 
     /* Copy track cover arts */

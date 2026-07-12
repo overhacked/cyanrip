@@ -129,6 +129,7 @@ Arguments are optional, except `-s`. By default cyanrip will rip all tracks from
 | -U                   | Disables Cover art DB database query and retrieval                                          |
 | -m                   | Lookup cover art with max size: 250, 500, 1200, -1 (no limit, default)                      |
 | -G                   | Disables embedding of cover art images                                                      |
+| -J                   | Only generate and print a CUE sheet, without ripping. Incompatible with -I                  |
 |                      | **Misc. options**                                                                           |
 | -Q                   | Eject CD tray if ripping has been successfully completed                                    |
 | -Y `file`            | Verify that a rip log's checksum matches its contents                                       |
