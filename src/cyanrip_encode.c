@@ -1120,8 +1120,11 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     /* Filename with protocol override */
     char *ffpath = cr_ffmpeg_file_path(filename);
 
-    /* lavf init */
-    ret = avformat_alloc_output_context2(&s->avf, NULL, cfmt->lavf_name, ffpath);
+    /* lavf init; raw PCM needs the muxer matching the emitted codec */
+    const char *lavf_name = cfmt->lavf_name;
+    if (cfmt->codec == AV_CODEC_ID_NONE && ctx->settings.decode_hdcd)
+        lavf_name = CONFIG_BIG_ENDIAN ? "s32be" : "s32le";
+    ret = avformat_alloc_output_context2(&s->avf, NULL, lavf_name, ffpath);
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Unable to init lavf context: %s!\n", av_err2str(ret));
         goto fail;

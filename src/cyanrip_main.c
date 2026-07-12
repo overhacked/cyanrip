@@ -2051,6 +2051,14 @@ int main(int argc, char **argv)
     if (!ctx->settings.print_info_only)
         cyanrip_log_finish_report(ctx);
 end:
+    /* Wait for the encoders to finish and collect their status */
+    for (int i = 0; i < ctx->nb_tracks; i++) {
+        cyanrip_track *t = &ctx->tracks[i];
+        for (int j = 0; j < ctx->settings.outputs_num; j++)
+            if (cyanrip_end_track_encoding(&t->enc_ctx[j]) < 0)
+                ctx->total_error_count++;
+    }
+
     cyanrip_log_end(ctx);
     cyanrip_cue_end(ctx);
 
