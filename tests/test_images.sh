@@ -145,6 +145,17 @@ timeout 60 "$CRIP" -d "$WORK/basic.cue" -N -A -U -s 0 -P 0 -K -o flac \
 ec=$?
 [ "$ec" -eq 1 ] || fail "longname: expected clean failure (1), got exit $ec"
 
+# Log checksum verification
+"$CRIP" --verify-log "$WORK/out_basic/log.log" >/dev/null 2>&1 || \
+    fail "verify-log: valid log did not verify"
+sed 's/Ripping errors: 0/Ripping errors: 1/' "$WORK/out_basic/log.log" > "$WORK/tampered.log"
+"$CRIP" --verify-log "$WORK/tampered.log" >/dev/null 2>&1 && \
+    fail "verify-log: tampered log verified"
+cat "$WORK/out_basic/log.log" > "$WORK/appended.log"
+printf 'extra line\n' >> "$WORK/appended.log"
+"$CRIP" --verify-log "$WORK/appended.log" >/dev/null 2>&1 && \
+    fail "verify-log: log with appended data verified"
+
 if [ "$FAILS" -gt 0 ]; then
     echo "$FAILS check(s) failed"
     exit 1
