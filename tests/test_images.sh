@@ -12,10 +12,16 @@ trap 'rm -rf "$WORK"' EXIT
 cp "$FIX"/*.cue "$FIX"/cdda.nrg "$WORK"/
 cp "$FIX"/cdda.bin "$WORK"/basic.bin
 cp "$FIX"/cdda.bin "$WORK"/pregap.bin
+cp "$FIX"/cdda.bin "$WORK"/preemph.bin
 cp "$FIX"/mixed.bin "$WORK"/mixed.bin
 
 FAILS=0
 FFPROBE=$(command -v ffprobe || true)
+FFMPEG=$(command -v ffmpeg || true)
+
+audio_md5() {
+    "$FFMPEG" -v error -i "$1" -f md5 - 2>/dev/null
+}
 
 fail() {
     echo "FAIL: $*"
@@ -105,9 +111,25 @@ expect nrg 1.flac:3 2.flac:3 log.log sheet.cue
 rip hdcd basic.cue -H
 expect hdcd 1.flac:4:s32 2.flac:4:s32 log.log sheet.cue
 
-# Forced deemphasis pipeline
+# Forced deemphasis pipeline, must actually alter the audio
 rip deemph basic.cue -E
 expect deemph 1.flac:4 2.flac:4 log.log sheet.cue
+if [ -n "$FFMPEG" ]; then
+    [ "$(audio_md5 "$WORK/out_deemph/1.flac")" != "$(audio_md5 "$WORK/out_basic/1.flac")" ] || \
+        fail "deemph: -E did not change the audio"
+fi
+
+# TOC preemphasis flags trigger automatic deemphasis, -W disables it
+rip preemph preemph.cue
+expect preemph 1.flac:4 2.flac:4 log.log sheet.cue
+rip preemph_off preemph.cue -W
+expect preemph_off 1.flac:4 2.flac:4 log.log sheet.cue
+if [ -n "$FFMPEG" ]; then
+    [ "$(audio_md5 "$WORK/out_preemph/1.flac")" = "$(audio_md5 "$WORK/out_deemph/1.flac")" ] || \
+        fail "preemph: automatic deemphasis output doesn't match -E"
+    [ "$(audio_md5 "$WORK/out_preemph_off/1.flac")" = "$(audio_md5 "$WORK/out_basic/1.flac")" ] || \
+        fail "preemph: -W did not disable deemphasis"
+fi
 
 # Album cover art: written out per format and embedded in every track
 rip art basic.cue -C "Front=$FIX/art.png"
