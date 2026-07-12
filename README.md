@@ -312,6 +312,8 @@ The default track file name syntax is: `{if #totaldiscs# > #1#|disc|.}{track} - 
 
 A useful example is to have separate directories for each disc: `-D "{album}{if #totaldiscs# > #1# CD|disc|} [{format}]" -F "{track} - {title}"`.
 
+Whitespace at the edges of every path component, and between the file name and its extension, is trimmed. Conditional bodies containing spaces (like the example above, when used as its own subdirectory) would otherwise leave dangling spaces on one of their branches.
+
 The ripping log name and location can be modified via the `-L` argument. By default its set to `{album}{if #totaldiscs# > #1# CD|disc|}`, which resolves to `Album name.log` for 1 CD and `Album name CD1.log` if there are multiple CDs and you're ripping the first.
 
 

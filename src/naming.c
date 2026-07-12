@@ -89,22 +89,6 @@ int crip_is_integer(const char *src)
     return 1;
 }
 
-static int add_to_dir_list(char ***dir_list, int *dir_list_nb, const char *src)
-{
-    int nb = *dir_list_nb;
-    char **new_ptr = av_realloc(*dir_list, (nb + 1) * sizeof(*new_ptr));
-    if (!new_ptr)
-        return AVERROR(ENOMEM);
-
-    new_ptr[nb] = av_strdup(src);
-    nb++;
-
-    *dir_list = new_ptr;
-    *dir_list_nb = nb;
-
-    return 0;
-}
-
 struct CRIPCharReplacement {
     const char from;
     const char to;
@@ -125,7 +109,6 @@ struct CRIPCharReplacement {
 };
 
 static int crip_bprint_sanitize(cyanrip_ctx *ctx, AVBPrint *buf, const char *str,
-                                char ***dir_list, int *dir_list_nb,
                                 int sanitize_fwdslash)
 {
     int32_t cp, ret, quote_match = 0;
@@ -156,8 +139,6 @@ static int crip_bprint_sanitize(cyanrip_ctx *ctx, AVBPrint *buf, const char *str
         int passthrough_slash = rep && !skip_sanitation && (rep->from == OS_DIR_CHAR && !sanitize_fwdslash);
 
         if (skip || skip_sanitation || passthrough_slash) {
-            if (passthrough_slash)
-                add_to_dir_list(dir_list, dir_list_nb, buf->str);
             av_bprint_append_data(buf, pos, str - pos);
             pos = str;
             continue;
@@ -209,8 +190,7 @@ static char *get_dir_tag_val(cyanrip_ctx *ctx, AVDictionary *meta,
 }
 
 static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
-                        const char *ofmt, char ***dir_list, int *dir_list_nb,
-                        const char *scheme)
+                        const char *ofmt, const char *scheme)
 {
     char *scheme_copy = av_strdup(scheme);
 
@@ -222,7 +202,7 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
             char tmpc = next ? *next : 0;
             if (next)
                 *next = '\0';
-            crip_bprint_sanitize(ctx, buf, pos, dir_list, dir_list_nb, 0);
+            crip_bprint_sanitize(ctx, buf, pos, 0);
             if (!next)
                 break;
             *next = tmpc;
@@ -332,7 +312,7 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
                         origin_is_tag = 0;
                     }
 
-                    crip_bprint_sanitize(ctx, buf, true_val, dir_list, dir_list_nb, origin_is_tag);
+                    crip_bprint_sanitize(ctx, buf, true_val, origin_is_tag);
                     av_free(true_val);
 
                     true_tok = av_strtok(NULL, "|", &true_save);
@@ -352,7 +332,7 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
             origin_is_tag = 0;
         }
 
-        crip_bprint_sanitize(ctx, buf, val, dir_list, dir_list_nb, origin_is_tag);
+        crip_bprint_sanitize(ctx, buf, val, origin_is_tag);
         av_free(val);
     }
 
@@ -364,40 +344,75 @@ fail:
     return AVERROR(EINVAL);
 }
 
+/* Schemes with conditionals easily produce spaces at the edges of path
+ * components or before the extension, which no one ever wants */
+static void crip_trim_path_components(char *path)
+{
+    char *dst = path, *src = path;
+
+    while (*src) {
+        /* Leading whitespace */
+        while (*src == ' ' || *src == '\t')
+            src++;
+
+        /* Copy the component, tracking the end of its last non-space run */
+        char *end = dst;
+        while (*src && *src != OS_DIR_CHAR) {
+            *dst++ = *src++;
+            if (dst[-1] != ' ' && dst[-1] != '\t')
+                end = dst;
+        }
+        dst = end;
+
+        if (*src == OS_DIR_CHAR) {
+            *dst++ = OS_DIR_CHAR;
+            src++;
+        }
+    }
+    *dst = '\0';
+
+    /* Whitespace before the extension */
+    char *dot = strrchr(path, '.');
+    if (dot && dot > path) {
+        char *ws = dot;
+        while (ws > path && (ws[-1] == ' ' || ws[-1] == '\t'))
+            ws--;
+        if (ws != dot)
+            memmove(ws, dot, strlen(dot) + 1);
+    }
+}
+
 char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
                     const cyanrip_out_fmt *fmt, void *arg)
 {
     char *ret = NULL;
     AVBPrint buf;
-    char **dir_list = NULL;
-    int dir_list_nb = 0;
     av_bprint_init(&buf, 0, AV_BPRINT_SIZE_AUTOMATIC);
 
-    if (process_cond(ctx, &buf, ctx->meta, fmt->folder_suffix, &dir_list, &dir_list_nb,
+    if (process_cond(ctx, &buf, ctx->meta, fmt->folder_suffix,
                      ctx->settings.folder_name_scheme))
         goto end;
 
-    add_to_dir_list(&dir_list, &dir_list_nb, buf.str);
     av_bprint_chars(&buf, OS_DIR_CHAR, 1);
 
     char *ext = NULL;
     if (type == CRIP_PATH_COVERART) {
         CRIPArt *art = arg;
-        crip_bprint_sanitize(ctx, &buf, dict_get(art->meta, "title"), &dir_list, &dir_list_nb, 0);
+        crip_bprint_sanitize(ctx, &buf, dict_get(art->meta, "title"), 0);
         ext = art->extension ? av_strdup(art->extension) : av_strdup("<extension>");
     } else if (type == CRIP_PATH_LOG) {
-        if (process_cond(ctx, &buf, ctx->meta, fmt->name, &dir_list, &dir_list_nb,
+        if (process_cond(ctx, &buf, ctx->meta, fmt->name,
                          ctx->settings.log_name_scheme))
             goto end;
         ext = av_strdup("log");
     } else if (type == CRIP_PATH_CUE) {
-        if (process_cond(ctx, &buf, ctx->meta, fmt->name, &dir_list, &dir_list_nb,
+        if (process_cond(ctx, &buf, ctx->meta, fmt->name,
                          ctx->settings.cue_name_scheme))
             goto end;
         ext = av_strdup("cue");
     } else {
         cyanrip_track *t = arg;
-        if (process_cond(ctx, &buf, t->meta, fmt->name, &dir_list, &dir_list_nb,
+        if (process_cond(ctx, &buf, t->meta, fmt->name,
                          ctx->settings.track_name_scheme))
             goto end;
         ext = av_strdup(t->track_is_data ? "bin" : fmt->ext);
@@ -408,16 +423,23 @@ char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
     av_free(ext);
 
 end:
-    for (int i = 0; i < dir_list_nb; i++) {
-        if (create_dirs) {
-            cyanrip_stat_t st_req = { 0 };
-            if (cyanrip_stat(dir_list[i], &st_req) == -1)
-                mkdir(dir_list[i], 0700);
-        }
-        av_free(dir_list[i]);
-    }
-    av_free(dir_list);
-
     av_bprint_finalize(&buf, &ret);
+    if (!ret)
+        return NULL;
+
+    crip_trim_path_components(ret);
+
+    if (create_dirs) {
+        /* Create every directory making up the path */
+        for (char *p = strchr(ret + 1, OS_DIR_CHAR); p;
+             p = strchr(p + 1, OS_DIR_CHAR)) {
+            *p = '\0';
+            cyanrip_stat_t st_req = { 0 };
+            if (cyanrip_stat(ret, &st_req) == -1)
+                mkdir(ret, 0700);
+            *p = OS_DIR_CHAR;
+        }
+    }
+
     return ret;
 }
