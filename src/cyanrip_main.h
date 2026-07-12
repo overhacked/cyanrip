@@ -269,5 +269,11 @@ extern const cyanrip_out_fmt crip_fmt_info[];
 char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
                     const cyanrip_out_fmt *fmt, void *arg);
 
+/* Prepend key1= and key2= to the first two keyless entries of a
+ * key=value:key=value string, minding escapes. Key 1 and 2 must be set. */
+char *append_missing_keys(const char *src, const char *key1, const char *key2);
+
+int crip_is_integer(const char *src);
+
 extern uint64_t paranoia_status[PARANOIA_CB_FINISHED + 1];
 extern const int crip_max_paranoia_level;
